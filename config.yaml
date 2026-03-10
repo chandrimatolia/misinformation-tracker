@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# config.yaml  —  Single source of truth for all project settings.
+# Import via:  from src.config import CFG
+# ─────────────────────────────────────────────────────────────────────────────
+
+data:
+  dir: "data"
+  liar_subdir: "liar"
+  max_claims: 200               # stratified cap for laptop safety
+  max_shares_per_claim: 200     # propagation edge cap per claim
+  seed: 42
+
+graph:
+  pagerank_alpha: 0.85
+  pagerank_max_iter: 200
+  max_nodes_display: 200        # trim graph before rendering
+  betweenness_k: 100            # approximation sample size
+  top_spreaders_n: 10
+
+nlp:
+  tfidf_max_features: 300
+  tfidf_ngram_min: 1
+  tfidf_ngram_max: 2
+  top_keywords_n: 15
+  credibility_threshold: 0.45   # >= real, < fake
+
+model:
+  test_size: 0.2
+  cv_folds: 5
+  seed: 42
+  # Features used for virality prediction
+  features:
+      - n_nodes
+      - n_edges
+      - max_depth
+      - max_breadth
+      - n_communities
+      - modularity
+      - median_speed_hrs
+      - debunk_pct
+      - sentiment_drift
+      - credibility_score
+      - virality_risk
+      - alarm_word_count
+      - credibility_word_count
+
+viz:
+  fake_color: "#EF4444"
+  real_color: "#22C55E"
+  neutral_color: "#6366F1"
+  background: "#0F172A"
+  grid_color: "#1E293B"
+  text_color: "#E2E8F0"
+  animation_frame_ms: 100
+
+dashboard:
+  server_host: "0.0.0.0"
+  server_port: 7860
+  share: false
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s [%(levelname)s] %(name)s — %(message)s"
+  datefmt: "%H:%M:%S"

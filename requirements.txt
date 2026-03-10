@@ -1,0 +1,22 @@
+# Core
+pandas>=2.0.0
+numpy>=1.24.0
+pyyaml>=6.0
+
+# Graph
+networkx>=3.1
+python-louvain>=0.16
+
+# NLP & ML
+scikit-learn>=1.3.0
+shap>=0.44.0
+
+# Visualisation
+plotly>=5.18.0
+
+# API server (replaces Gradio)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+
+pydantic>=2.0.0
