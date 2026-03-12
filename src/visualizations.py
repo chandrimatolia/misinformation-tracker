@@ -349,7 +349,7 @@ def plot_shap_importance(shap_df):
     ]
 
     annotations = [
-        dict(x=0.5, y=-0.14, xref="paper", yref="paper",
+        dict(x=0.5, y=-0.12, xref="paper", yref="paper",
              text="Mean |SHAP| = average absolute Shapley value across 200 claims  ·  Higher = stronger driver of fake/real classification  ·  ★ = dominant global predictor",
              showarrow=False, font=dict(size=10, color="#475569"), align="center"),
     ]
@@ -543,7 +543,7 @@ def plot_roc_curve(y_true, y_prob, auc_score):
     opt_idx = int(_np.argmin(_np.sqrt(_np.array(fpr)**2 + (1-_np.array(tpr))**2)))
 
     annotations = [
-        dict(x=0.5, y=-0.14, xref="paper", yref="paper",
+        dict(x=0.5, y=-0.12, xref="paper", yref="paper",
              text=(f"AUC = {auc_score:.3f}  ·  "
                    f"Optimal threshold: FPR={fpr[opt_idx]:.2f} · TPR={tpr[opt_idx]:.2f}  ·  "
                    "High AUC reflects NLP features trained on calibrated synthetic labels"),
@@ -948,7 +948,7 @@ def plot_sentiment_drift(sentiment_df, label="fake"):
     if sents:
         min_idx = sents.index(min(sents))
         annotations = [
-            dict(x=0.5, y=-0.22, xref="paper", yref="paper",
+            dict(x=0.5, y=-0.26, xref="paper", yref="paper",
                  text="Sentiment scored 0–1  ·  Zone shading: red <0.4 = net negative  ·  amber 0.4–0.6 = neutral  ·  green >0.6 = positive",
                  showarrow=False, font=dict(size=10, color="#475569"), align="center"),
             dict(x=depths[min_idx], y=sents[min_idx],
@@ -1001,7 +1001,7 @@ def plot_super_spreaders(spreaders_df):
 
     annotations = [dict(
         text="PageRank = global network influence  ·  Out-degree = direct amplification  ·  Betweenness = bridge between isolated communities <br> ·  ★ = super-spreader with highest compound score",
-        x=0.5, y=-0.22, xref="paper", yref="paper",
+        x=0.5, y=-0.26, xref="paper", yref="paper",
         showarrow=False, font=dict(size=10, color="#475569"), align="center"
     )]
 
