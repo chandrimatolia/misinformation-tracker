@@ -291,7 +291,9 @@
       <div>
         <div class="card-title">VIRALITY THREAT LEVEL</div>
         <div class="threat-gauge-wrap">
-          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase">Composite Risk Index · 5-Signal Weighted Score</div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px">Composite Risk Index · 5-Signal Weighted Score</div>
+
+          <!-- Stacked risk bands -->
           <div class="threat-bands">
             <div class="threat-band" id="band-low">
               <div class="threat-band-dot" style="background:var(--real)"></div>
@@ -312,12 +314,41 @@
               <div class="threat-band-desc">Critical. Matches linguistic fingerprint of high-velocity false narratives in LIAR corpus.</div>
             </div>
           </div>
-          <div class="threat-score-display">
-            <div id="threat-score-num" class="threat-score-num">—</div>
-            <div class="threat-score-bar-wrap"><div id="threat-score-bar" class="threat-score-bar"></div></div>
-            <div class="threat-score-label">out of 100 · <span id="threat-level-text" style="font-weight:700"></span></div>
+
+          <!-- Visual spectrum bar with needle -->
+          <div style="margin:16px 0 8px">
+            <div style="position:relative;height:20px;border-radius:10px;overflow:visible;background:linear-gradient(to right,#10b981 0%,#10b981 34%,#fbbf24 34%,#fbbf24 65%,#f43f5e 65%,#f43f5e 100%);opacity:0.85">
+              <div id="threat-needle" style="position:absolute;top:-4px;width:3px;height:28px;background:white;border-radius:2px;box-shadow:0 0 6px rgba(255,255,255,0.6);transition:left .8s ease;left:0%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--muted);margin-top:4px"><span>0</span><span>34</span><span>65</span><span>100</span></div>
           </div>
-          <div id="threat-narrative" class="threat-narrative">Submit a claim to receive a propagation risk assessment.</div>
+
+          <!-- Score + label -->
+          <div class="threat-score-display">
+            <div style="display:flex;align-items:baseline;justify-content:center;gap:8px">
+              <div id="threat-score-num" class="threat-score-num">—</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">/100</div>
+            </div>
+            <div class="threat-score-label" style="margin-top:6px">Risk Level: <span id="threat-level-text" style="font-weight:700;font-family:var(--font-mono);font-size:12px"></span></div>
+          </div>
+
+          <div id="threat-narrative" class="threat-narrative" style="margin-top:12px">Submit a claim to receive a propagation risk assessment.</div>
+
+          <!-- Context stats -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px" id="threat-stats" style="display:none">
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px;text-align:center">
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--muted);text-transform:uppercase">LIAR avg</div>
+              <div style="font-family:var(--font-head);font-size:13px;color:var(--muted2);margin-top:2px">42.1</div>
+            </div>
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px;text-align:center">
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--muted);text-transform:uppercase">Fake avg</div>
+              <div style="font-family:var(--font-head);font-size:13px;color:var(--fake);margin-top:2px">61.3</div>
+            </div>
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px;text-align:center">
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--muted);text-transform:uppercase">Real avg</div>
+              <div style="font-family:var(--font-head);font-size:13px;color:var(--real);margin-top:2px">24.7</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -930,10 +961,14 @@ async function runAnalysis() {
     const riskColor = risk >= 65 ? 'var(--fake)' : risk >= 35 ? 'var(--yellow)' : 'var(--real)';
     document.getElementById('threat-score-num').textContent = risk.toFixed(1);
     document.getElementById('threat-score-num').style.color = riskColor;
-    document.getElementById('threat-score-bar').style.width = risk + '%';
-    document.getElementById('threat-score-bar').style.background = riskColor;
     document.getElementById('threat-level-text').textContent = d.risk_level.toUpperCase();
     document.getElementById('threat-level-text').style.color = riskColor;
+    // animate needle
+    const needle = document.getElementById('threat-needle');
+    if (needle) needle.style.left = `calc(${risk}% - 1.5px)`;
+    // show context stats
+    const statsEl = document.getElementById('threat-stats');
+    if (statsEl) statsEl.style.display = 'grid';
     ['low','med','high'].forEach(b => {
       document.getElementById('band-'+b).className = 'threat-band';
     });
