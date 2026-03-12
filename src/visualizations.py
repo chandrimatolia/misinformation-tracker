@@ -348,8 +348,8 @@ def plot_heatmap_spread(claim_id, spread_df, label="fake"):
 
     # Footer — concise, won't overflow
     annotations.append(dict(
-        x=0.5, y=-0.20, xref="paper", yref="paper",
-        text="Darker = more shares  ·  Diagonal pattern = cascade deepening through the day  ·  ★ = peak amplification window",
+        x=0.5, y=-0.18, xref="paper", yref="paper",
+        text="·  Diagonal pattern = cascade deepening through the day  ·  ★ = peak amplification window",
         showarrow=False, font=dict(size=10, color="#475569"), align="center",
     ))
 
@@ -974,7 +974,7 @@ def plot_fake_vs_real(summary_df):
                    gridcolor=GRID, categoryorder="array", categoryarray=metrics),
         legend=dict(bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID, borderwidth=1,
                     font=dict(size=11, color=TEXT), x=0.01, y=0.01,
-                    xanchor="left", yanchor="bottom"),
+                    xanchor="right", yanchor="bottom"),
         annotations=annotations,
     )
     return fig
@@ -1644,8 +1644,8 @@ def plot_depth_virality_scatter(metrics_df):
 
     # Footer
     annotations.append(dict(
-        x=0.5, y=-0.14, xref="paper", yref="paper",
-        text="Each dot = one claim  ·  ◆ = class centroid  ·  Dashed = linear regression  ·  Zones: red = fake territory · green = real territory",
+        x=0.5, y=-0.12, xref="paper", yref="paper",
+        text="·  ◆ = class centroid  ·  Dashed = linear regression  ·  Zones: red = fake territory · green = real territory",
         showarrow=False, font=dict(size=10, color="#475569"), align="center",
     ))
 
