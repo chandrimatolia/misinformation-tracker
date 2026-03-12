@@ -490,34 +490,36 @@ def plot_shap_waterfall(shap_row_df, claim_text=""):
             font=dict(size=8, color="#475569"),
         )
 
-    short_claim = (claim_text[:52] + "…") if len(claim_text) > 52 else claim_text
+    short_claim = (claim_text[:70] + "…") if len(claim_text) > 70 else claim_text
     fig.update_layout(
         title=dict(
             text=f'Why was "{short_claim}" classified this way?' if claim_text else "XAI: Feature attribution",
-            font=dict(size=12, color=TEXT), x=0.5, xanchor="center"),
+            font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        # l=190 for y-axis label + feature value chips; r=80 for +value labels
-        margin=dict(l=190, r=80, t=72, b=100),
-        height=400,
+        # l=200 accommodates y-tick labels + raw value column
+        # r=90 gives room for +x.xxx labels beyond bar ends
+        # b=120 gives full room for footer annotation
+        margin=dict(l=200, r=90, t=72, b=120),
+        height=420,
         xaxis=dict(
-            title=dict(text="← REAL  ·  Shapley value  ·  FAKE →", font=dict(size=10), standoff=10),
+            title=dict(text="← REAL  ·  Shapley value  ·  FAKE →", font=dict(size=11), standoff=10),
             range=[-x_max * 1.7, x_max * 1.7],
-            gridcolor=GRID, tickfont=dict(color="#475569", size=9), zeroline=False,
+            gridcolor=GRID, tickfont=dict(color="#475569", size=10), zeroline=False,
         ),
         yaxis=dict(
             type="category",
-            tickfont=dict(color=TEXT, size=10),
+            tickfont=dict(color=TEXT, size=11),
             gridcolor="rgba(0,0,0,0)",
         ),
         annotations=[dict(
             text=(
                 "SHAP: each bar = one feature's marginal Shapley contribution  ·  "
                 "bar length = magnitude  ·  ★ = dominant predictor  ·  "
-                "left values = raw feature value  ·  hover for details"
+                "left values = raw feature value  ·  hover each bar for details"
             ),
             x=0.5, y=-0.2, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"), align="center"
+            showarrow=False, font=dict(size=10, color="#475569"), align="center"
         )]
     )
     return fig
@@ -1353,11 +1355,10 @@ def plot_mutation_similarity(mutation_df):
     fig.update_layout(
         title=dict(
             text=f"Semantic mutation across {n} propagated variants — {below}/{n} breach the 70% stability threshold",
-            font=dict(size=12, color=TEXT), x=0.5, xanchor="center"),
+            font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        # t=68 for title; b=110 gives full room for two-line annotation
-        margin=dict(l=64, r=30, t=68, b=110),
+        margin=dict(l=70, r=40, t=68, b=120),
         height=420,
         legend=dict(
             bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID, borderwidth=1,
@@ -1374,14 +1375,9 @@ def plot_mutation_similarity(mutation_df):
             tickfont=dict(color=TEXT), dtick=0.1
         ),
         annotations=[dict(
-            text=(
-                "TF-IDF cosine similarity  ·  ◆ diamond = below 70% threshold"
-                "  ·  Zone shading: <span style='color:#10b981'>■ stable &gt;0.7</span>"
-                "  ·  <span style='color:#fbbf24'>■ moderate drift 0.5–0.7</span>"
-                "  ·  <span style='color:#f43f5e'>■ heavy mutation &lt;0.5</span>"
-            ),
-            x=0.5, y=-0.22, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"), align="center"
+            text="TF-IDF cosine similarity  ·  ◆ diamond = below 70% threshold  ·  Shading: green = stable (>0.7)  ·  amber = moderate drift (0.5–0.7)  ·  red = heavy mutation (<0.5)",
+            x=0.5, y=-0.2, xref="paper", yref="paper",
+            showarrow=False, font=dict(size=10, color="#475569"), align="center"
         )]
     )
     return fig

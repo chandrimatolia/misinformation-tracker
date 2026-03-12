@@ -353,21 +353,21 @@
       </div>
     </div>
 
-    <!-- ROW 2: Mutation + SHAP side by side -->
-    <div class="grid-2 gap">
-      <div>
-        <div class="card-title">SEMANTIC MUTATION TRAJECTORY</div>
-        <div id="mutation-insight" class="mutation-insight">Cosine similarity of each propagated variant to the original claim text — tracking semantic drift across the diffusion cascade.</div>
-        <div id="mutation-plot" class="plot-box"></div>
+    <!-- ROW 2: Mutation full-width -->
+    <div class="gap">
+      <div class="card-title">SEMANTIC MUTATION TRAJECTORY</div>
+      <div id="mutation-insight" class="mutation-insight">Cosine similarity of each propagated variant to the original claim text — tracking semantic drift across the diffusion cascade.</div>
+      <div id="mutation-plot" style="width:100%;height:400px"></div>
+    </div>
+
+    <!-- ROW 3: SHAP full-width -->
+    <div class="gap">
+      <div class="card-title">SHAP · XAI FEATURE ATTRIBUTION</div>
+      <div class="shap-headline">
+        <div class="shap-headline-title">⬡ Dominant Predictor</div>
+        <div id="shap-headline-text" class="shap-headline-text">SHAP (SHapley Additive exPlanations) decompose the model's prediction into individual feature contributions — each bar quantifies one signal's marginal impact on the fake/real classification.</div>
       </div>
-      <div>
-        <div class="card-title">SHAP · XAI FEATURE ATTRIBUTION</div>
-        <div class="shap-headline">
-          <div class="shap-headline-title">⬡ Dominant Predictor</div>
-          <div id="shap-headline-text" class="shap-headline-text">SHAP (SHapley Additive exPlanations) decompose the model's prediction into individual feature contributions — each bar quantifies one signal's marginal impact on the fake/real classification.</div>
-        </div>
-        <div id="shap-plot-1" class="plot-box"></div>
-      </div>
+      <div id="shap-plot-1" style="width:100%;height:420px"></div>
     </div>
 
   </div>
