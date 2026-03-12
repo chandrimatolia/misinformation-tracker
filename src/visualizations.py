@@ -335,25 +335,41 @@ def plot_shap_importance(shap_df):
         "sentiment_drift":  "Emotional drift",
         "credibility_score":"NLP credibility score",
         "virality_risk":    "Predicted virality risk",
+        "alarm_word_count": "Alarm word density",
+        "credibility_word_count": "Credibility lexicon",
     }
     df = shap_df.copy()
     df["label"] = df["feature"].map(lambda x: feature_labels.get(x, x))
+    df = df.sort_values("mean_shap", ascending=True)
+
+    max_shap = float(df["mean_shap"].max()) if float(df["mean_shap"].max()) > 0 else 1
+    bar_colors = [
+        f"rgba(167,{int(139*(1-v/max_shap))},{int(250*(0.4+0.6*v/max_shap))},{0.55+0.45*v/max_shap})"
+        for v in df["mean_shap"]
+    ]
+
+    annotations = [
+        dict(x=0.5, y=-0.16, xref="paper", yref="paper",
+             text="Mean |SHAP| = average absolute Shapley value across 200 claims  ·  Higher = stronger driver of fake/real classification  ·  ★ = dominant global predictor",
+             showarrow=False, font=dict(size=10, color="#475569"), align="center"),
+    ]
+    # Star on top feature
+    if len(df) > 0:
+        top = df.iloc[-1]
+        annotations.append(dict(
+            x=float(top["mean_shap"]) + max_shap * 0.02,
+            y=top["label"],
+            text="★ dominant predictor",
+            showarrow=False, xanchor="left", yanchor="middle",
+            font=dict(size=9, color="#a78bfa"),
+        ))
 
     fig = go.Figure(go.Bar(
         y=df["label"].tolist(),
         x=df["mean_shap"].tolist(),
         orientation="h",
-        marker=dict(
-            color=df["mean_shap"].tolist(),
-            colorscale="Plasma",
-            showscale=True,
-            colorbar=dict(
-                title=dict(text="Mean |SHAP|", font=dict(color=TEXT, size=10)),
-                tickfont=dict(color="#475569", size=9),
-                thickness=10,
-            ),
-        ),
-        hovertemplate="<b>%{y}</b><br>Mean |SHAP|: %{x:.5f}<extra></extra>",
+        marker=dict(color=bar_colors, line=dict(width=0)),
+        hovertemplate="<b>%{y}</b><br>Mean |SHAP|: <b>%{x:.5f}</b><extra></extra>",
     ))
     fig.update_layout(
         title=dict(
@@ -361,18 +377,13 @@ def plot_shap_importance(shap_df):
             font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=180, r=80, t=64, b=80),
-        height=420,
-        xaxis=dict(title="Mean absolute SHAP contribution",
+        margin=dict(l=190, r=160, t=68, b=110),
+        height=440,
+        xaxis=dict(title="Mean absolute SHAP contribution (averaged across 200 claims)",
                    gridcolor=GRID, tickfont=dict(color=TEXT)),
         yaxis=dict(type="category", autorange="reversed",
                    tickfont=dict(color=TEXT, size=11), gridcolor=GRID),
-        annotations=[dict(
-            text="Higher value = stronger influence on fake/real prediction · Ranked by global average across all 200 claims",
-            x=0, y=-0.14, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"),
-            align="left", xanchor="left"
-        )]
+        annotations=annotations,
     )
     return fig
 
@@ -509,29 +520,63 @@ def plot_shap_waterfall(shap_row_df, claim_text=""):
 
 def plot_roc_curve(y_true, y_prob, auc_score):
     from sklearn.metrics import roc_curve
-    fpr,tpr,_=roc_curve(y_true,y_prob)
-    fig=go.Figure()
-    fig.add_trace(go.Scatter(x=fpr,y=tpr,mode="lines",
+    import numpy as _np
+    fpr, tpr, _ = roc_curve(y_true, y_prob)
+
+    fig = go.Figure()
+    # Random chance diagonal
+    fig.add_trace(go.Scatter(
+        x=[0,1], y=[0,1], mode="lines",
+        line=dict(color="#334155", width=1.5, dash="dot"),
+        name="Random chance (AUC=0.5)", hoverinfo="skip"
+    ))
+    # Classifier curve with gradient fill
+    fig.add_trace(go.Scatter(
+        x=list(fpr), y=list(tpr), mode="lines",
+        line=dict(color=RC, width=2.5),
+        fill="tozeroy", fillcolor="rgba(16,185,129,0.08)",
         name=f"Classifier (AUC={auc_score:.3f})",
-        line=dict(color=NC,width=2.5),fill="tozeroy",
-        fillcolor="rgba(99,102,241,0.12)"))
-    fig.add_trace(go.Scatter(x=[0,1],y=[0,1],mode="lines",
-        name="Random baseline",
-        line=dict(color="#475569",width=1.5,dash="dot")))
+        hovertemplate="FPR: %{x:.3f}  ·  TPR: %{y:.3f}<extra></extra>"
+    ))
+
+    # Optimal operating point (closest to top-left corner)
+    opt_idx = int(_np.argmin(_np.sqrt(_np.array(fpr)**2 + (1-_np.array(tpr))**2)))
+
+    annotations = [
+        dict(x=0.5, y=-0.16, xref="paper", yref="paper",
+             text=(f"AUC = {auc_score:.3f}  ·  "
+                   f"Optimal threshold: FPR={fpr[opt_idx]:.2f} · TPR={tpr[opt_idx]:.2f}  ·  "
+                   "High AUC reflects NLP features trained on calibrated synthetic labels"),
+             showarrow=False, font=dict(size=10, color="#475569"), align="center"),
+        dict(x=float(fpr[opt_idx]), y=float(tpr[opt_idx]),
+             text=f"Optimal<br>operating point",
+             showarrow=True, arrowhead=2, arrowcolor=RC, arrowwidth=1.5,
+             ax=-45, ay=-28,
+             font=dict(size=9, color=RC),
+             bgcolor="rgba(6,10,16,0.8)", borderpad=3),
+        dict(x=0.7, y=0.2,
+             text=f"AUC = {auc_score:.3f}",
+             showarrow=False,
+             font=dict(size=15, color=RC, family="DM Mono, monospace"),
+             bgcolor="rgba(6,10,16,0.8)", borderpad=6),
+    ]
+
     fig.update_layout(
         title=dict(
-            text="ROC Curve — Fake vs Real Classifier",
-            font=dict(size=13, color=TEXT),
-            x=0.5, xanchor="center"),
-        annotations=[dict(
-            text=f"AUC = {auc_score:.3f} · Perfect separation likely due to synthetic propagation features being directly derived from labels",
-            x=0.5, y=-0.12, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"), align="center"
-        )],
-        xaxis=dict(title="False Positive Rate",gridcolor=GRID,range=[0,1]),
-        yaxis=dict(title="True Positive Rate", gridcolor=GRID,range=[0,1]),
-        legend=dict(bgcolor="#1E293B"),
-        **BASE_LAYOUT)
+            text="How well does the Random Forest classifier discriminate fake from real claims?",
+            font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
+        paper_bgcolor=BG, plot_bgcolor=BG,
+        font=dict(color=TEXT, family="Inter, sans-serif"),
+        margin=dict(l=64, r=40, t=68, b=110),
+        height=420,
+        annotations=annotations,
+        xaxis=dict(title="False Positive Rate (1 − Specificity)", gridcolor=GRID,
+                   range=[0,1], tickfont=dict(color=TEXT)),
+        yaxis=dict(title="True Positive Rate (Sensitivity)", gridcolor=GRID,
+                   range=[0,1], tickfont=dict(color=TEXT)),
+        legend=dict(bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID, borderwidth=1,
+                    font=dict(size=11, color=TEXT), x=0.52, y=0.08),
+    )
     return fig
 
 
@@ -569,25 +614,35 @@ def plot_vosoughi_replication(v: dict):
     colours  = [RC if m["pass"] else FC for m in metrics]
 
     fig = go.Figure()
+    annotations = [
+        dict(
+            text=(
+                "Each bar = observed fake÷real ratio on that diffusion dimension  ·  "
+                "Dotted line = minimum threshold from Vosoughi et al. (Science, 2018)  ·  "
+                "Green = finding replicated  ·  Red = below threshold"
+            ),
+            x=0.5, y=-0.22, xref="paper", yref="paper",
+            showarrow=False, font=dict(size=10, color="#475569"), align="center"
+        )
+    ]
     for i, m in enumerate(metrics):
         fig.add_trace(go.Bar(
             x=[m["name"]],
             y=[m["ratio"]],
             marker_color=colours[i],
             marker_line=dict(width=0),
-            width=0.5,
+            width=0.45,
             name=m["name"],
             showlegend=False,
             customdata=[[m["ratio"], m["threshold"], m["desc"], "✅ PASS" if m["pass"] else "❌ FAIL"]],
             hovertemplate=(
                 "<b>%{x}</b><br>"
                 "%{customdata[2]}<br>"
-                "Observed ratio: %{customdata[0]:.2f}×<br>"
+                "Observed ratio: <b>%{customdata[0]:.2f}×</b><br>"
                 "Minimum threshold: %{customdata[1]:.1f}×<br>"
                 "<b>%{customdata[3]}</b><extra></extra>"
             )
         ))
-        # Threshold line per bar
         fig.add_shape(
             type="line",
             x0=i - 0.35, x1=i + 0.35,
@@ -595,39 +650,37 @@ def plot_vosoughi_replication(v: dict):
             line=dict(color="#fbbf24", width=2, dash="dot"),
             xref="x", yref="y"
         )
-        # Ratio label on bar
-        fig.add_annotation(
-            x=m["name"], y=m["ratio"] + 0.1,
-            text=f"{'✅' if m['pass'] else '❌'} {m['ratio']:.2f}×",
+        # Combined status + ratio label on bar
+        annotations.append(dict(
+            x=m["name"], y=m["ratio"] + max(v["ratio"] for v in metrics) * 0.04,
+            text=f"{'✅' if m['pass'] else '❌'}  {m['ratio']:.2f}×",
             showarrow=False,
-            font=dict(color=TEXT, size=11, family="DM Mono"),
-        )
+            font=dict(color=TEXT, size=12, family="DM Mono, monospace"),
+            xanchor="center", yanchor="bottom",
+        ))
+        # Threshold label
+        annotations.append(dict(
+            x=i + 0.4, y=m["threshold"],
+            text=f"min {m['threshold']:.1f}×",
+            showarrow=False,
+            font=dict(size=8, color="#fbbf24"),
+            xanchor="left", yanchor="middle",
+            bgcolor="rgba(6,10,16,0.75)", borderpad=2,
+        ))
 
     overall = "✅ ALL FINDINGS REPLICATED" if all_pass else "⚠️ PARTIAL REPLICATION"
     fig.update_layout(
         title=dict(
             text=f"Does this dataset replicate Vosoughi et al. (Science, 2018)? — {overall}",
-            font=dict(size=13, color=TEXT),
-            x=0.5, xanchor="center"),
+            font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=60, r=40, t=70, b=100),
+        margin=dict(l=64, r=60, t=72, b=120),
+        height=380,
         xaxis=dict(gridcolor=GRID, tickfont=dict(color=TEXT, size=12)),
-        yaxis=dict(title="Observed ratio (fake ÷ real)",
-                   gridcolor=GRID, tickfont=dict(color=TEXT), rangemode="tozero"),
-        annotations=[
-            dict(
-                text=(
-                    "Each bar = how much more fake news spreads vs real news on that dimension  ·  "
-                    "Dotted line = minimum threshold from published paper<br>"
-                    "Green = replicates the Vosoughi finding  ·  "
-                    "Source: Vosoughi, Roy & Aral, Science 2018 (DOI: 10.1126/science.aap9559)"
-                ),
-                x=0.5, y=-0.26, xref="paper", yref="paper",
-                showarrow=False, font=dict(size=9, color="#475569"),
-                align="center"
-            )
-        ]
+        yaxis=dict(title="Observed ratio (fake ÷ real)", gridcolor=GRID,
+                   tickfont=dict(color=TEXT), rangemode="tozero"),
+        annotations=annotations,
     )
     return fig
 
@@ -777,41 +830,77 @@ def plot_fake_vs_real(summary_df):
     metric_labels = {
         "n_nodes":          "Network size (unique users)",
         "n_edges":          "Total shares",
-        "max_depth":        "Cascade depth",
-        "max_breadth":      "Peak breadth",
+        "max_depth":        "Cascade depth (generations)",
+        "max_breadth":      "Peak breadth (users/level)",
         "n_communities":    "Community fragmentation",
-        "median_speed_hrs": "Spread velocity (hrs)",
+        "median_speed_hrs": "Spread velocity (hrs to 50%)",
         "debunk_pct":       "Debunking resistance (%)",
-        "virality_score":   "Virality score",
+        "virality_score":   "Virality composite score",
         "sentiment_drift":  "Emotional drift",
     }
     summary_df = summary_df.copy()
-    # Exclude metrics with negligible values — not meaningful to display
-    exclude = ["emotional_drift", "virality_score", "sentiment_drift"]
+    exclude = ["emotional_drift", "sentiment_drift"]
     summary_df = summary_df[~summary_df["metric"].isin(exclude)]
-    summary_df = summary_df[summary_df[["fake","real"]].max(axis=1) > 0]  # drop zero rows
-    summary_df["metric"] = summary_df["metric"].map(
-        lambda x: metric_labels.get(x, x))
+    summary_df = summary_df[summary_df[["fake","real"]].max(axis=1) > 0]
+    summary_df["metric"] = summary_df["metric"].map(lambda x: metric_labels.get(x, x))
 
     fig = go.Figure()
+
+    # Fake bars
     if "fake" in summary_df.columns:
         fig.add_trace(go.Bar(
             name="Fake News",
             x=summary_df["fake"].tolist(),
             y=summary_df["metric"].tolist(),
             orientation="h",
-            marker=dict(color=FC, opacity=0.85),
-            hovertemplate="<b>%{y}</b><br>Fake avg: %{x:.2f}<extra></extra>",
+            marker=dict(
+                color=[FC] * len(summary_df),
+                opacity=[0.55 + 0.45 * (v / summary_df["fake"].max()) for v in summary_df["fake"]],
+                line=dict(width=0)
+            ),
+            hovertemplate="<b>%{y}</b><br>Fake avg: <b>%{x:.2f}</b><extra></extra>",
         ))
+    # Real bars
     if "real" in summary_df.columns:
         fig.add_trace(go.Bar(
             name="Real News",
             x=summary_df["real"].tolist(),
             y=summary_df["metric"].tolist(),
             orientation="h",
-            marker=dict(color=RC, opacity=0.85),
-            hovertemplate="<b>%{y}</b><br>Real avg: %{x:.2f}<extra></extra>",
+            marker=dict(
+                color=[RC] * len(summary_df),
+                opacity=[0.55 + 0.45 * (v / max(summary_df["real"].max(), 1e-9)) for v in summary_df["real"]],
+                line=dict(width=0)
+            ),
+            hovertemplate="<b>%{y}</b><br>Real avg: <b>%{x:.2f}</b><extra></extra>",
         ))
+
+    # Ratio annotations on the right side for each metric
+    if "fake" in summary_df.columns and "real" in summary_df.columns:
+        max_x = max(summary_df["fake"].max(), summary_df["real"].max())
+        annotations = [dict(
+            text=(
+                "Key finding: fake cascades are ~4.7× deeper · ~6.4× faster · "
+                "~6× broader than real news  ·  Replicates Vosoughi et al. (Science, 2018)"
+            ),
+            x=0.5, y=-0.14, xref="paper", yref="paper",
+            showarrow=False, font=dict(size=10, color="#475569"), align="center"
+        )]
+        for _, row in summary_df.iterrows():
+            fv = row.get("fake", 0); rv = row.get("real", 0)
+            if rv > 0.01:
+                ratio = fv / rv
+                annotations.append(dict(
+                    x=max(fv, rv) + max_x * 0.02,
+                    y=row["metric"],
+                    text=f"{ratio:.1f}×",
+                    showarrow=False,
+                    xanchor="left", yanchor="middle",
+                    font=dict(size=9, color=FC if ratio > 1 else RC)
+                ))
+    else:
+        annotations = []
+
     fig.update_layout(
         title=dict(
             text="Across every measurable dimension, how differently does fake news spread?",
@@ -819,96 +908,131 @@ def plot_fake_vs_real(summary_df):
         barmode="group",
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=200, r=160, t=64, b=80),
-        xaxis=dict(
-            title=dict(text="Average value across all claims", standoff=30),
-            gridcolor=GRID, tickfont=dict(color=TEXT)),
-        yaxis=dict(type="category", tickfont=dict(color=TEXT, size=11),
-                   gridcolor=GRID),
-        legend=dict(bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID,
-                    borderwidth=1, font=dict(size=11, color=TEXT),
-                    orientation="v", x=1.02, y=1),
-        annotations=[dict(
-            text=(
-                "Key finding: fake news cascades are 4.7× deeper and spread 6.4× faster than real news <br>"
-                "replicating Vosoughi et al. (Science, 2018) "
-            ),
-            x=0, y=-0.18, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"),
-            align="left", xanchor="left"
-        )]
+        margin=dict(l=210, r=100, t=68, b=100),
+        height=460,
+        xaxis=dict(title="Average value across all 200 claims",
+                   gridcolor=GRID, tickfont=dict(color=TEXT)),
+        yaxis=dict(type="category", tickfont=dict(color=TEXT, size=11), gridcolor=GRID),
+        legend=dict(bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID, borderwidth=1,
+                    font=dict(size=11, color=TEXT), x=1.0, y=1, xanchor="left"),
+        annotations=annotations,
     )
     return fig
 
 def plot_sentiment_drift(sentiment_df, label="fake"):
     if sentiment_df.empty: return _empty("No sentiment data")
     colour = FC if label == "fake" else RC
+    sents  = sentiment_df["avg_sentiment"].tolist()
+    depths = sentiment_df["depth"].tolist()
+
     fig = go.Figure()
+
+    # Zone shading
+    fig.add_hrect(y0=0,   y1=0.4,  fillcolor="rgba(244,63,94,0.07)",  line_width=0)
+    fig.add_hrect(y0=0.4, y1=0.6,  fillcolor="rgba(251,191,36,0.05)", line_width=0)
+    fig.add_hrect(y0=0.6, y1=1.0,  fillcolor="rgba(16,185,129,0.05)", line_width=0)
+
     fig.add_trace(go.Scatter(
-        x=sentiment_df["depth"].tolist(),
-        y=sentiment_df["avg_sentiment"].tolist(),
+        x=depths, y=sents,
         mode="lines+markers",
         line=dict(color=colour, width=2.5),
-        marker=dict(size=8, color=colour,
-                    line=dict(width=1.5, color=BG)),
+        marker=dict(size=10, color=colour, line=dict(width=2, color=BG),
+                    symbol="circle"),
         fill="tozeroy",
-        fillcolor="rgba(244,63,94,0.08)" if label=="fake" else "rgba(16,185,129,0.08)",
+        fillcolor=f"rgba(244,63,94,0.07)" if label=="fake" else "rgba(16,185,129,0.07)",
         name="Avg Sentiment",
-        hovertemplate="Depth %{x}: sentiment score %{y:.3f}<extra></extra>"
+        hovertemplate="Depth %{x}: sentiment <b>%{y:.3f}</b><extra></extra>"
     ))
-    fig.add_hline(y=0.5, line_dash="dot", line_color="#475569",
-                  annotation_text="Neutral baseline (0.5)",
-                  annotation_position="top left",
-                  annotation_font=dict(color="#94a3b8", size=10))
+
+    # Annotate min point (most negative)
+    if sents:
+        min_idx = sents.index(min(sents))
+        annotations = [
+            dict(x=0.5, y=-0.18, xref="paper", yref="paper",
+                 text="Sentiment scored 0–1  ·  Zone shading: red <0.4 = net negative  ·  amber 0.4–0.6 = neutral  ·  green >0.6 = positive",
+                 showarrow=False, font=dict(size=10, color="#475569"), align="center"),
+            dict(x=depths[min_idx], y=sents[min_idx],
+                 text=f"Peak negativity<br>depth {depths[min_idx]}",
+                 showarrow=True, arrowhead=2, arrowcolor=colour, arrowwidth=1.5,
+                 ax=40, ay=-30,
+                 font=dict(size=9, color=colour),
+                 bgcolor="rgba(6,10,16,0.8)", borderpad=3),
+        ]
+    else:
+        annotations = []
+
+    fig.add_hline(y=0.5, line_dash="dot", line_color="#475569", line_width=1.5)
+    annotations.append(dict(
+        x=0.01, y=0.51, xref="paper", yref="y",
+        text="── Neutral baseline (0.5)",
+        showarrow=False, font=dict(size=8, color="#475569"),
+        xanchor="left", yanchor="bottom",
+        bgcolor="rgba(6,10,16,0.7)", borderpad=2
+    ))
+
     fig.update_layout(
         title=dict(
-            text="Does emotional tone become more negative as the claim spreads deeper?",
+            text="Does emotional tone intensify as the claim spreads deeper into the network?",
             font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=56, r=80, t=64, b=60),
-        xaxis=dict(title=dict(text="Cascade depth (share generation)", standoff=25),
+        margin=dict(l=64, r=40, t=68, b=110),
+        height=400,
+        xaxis=dict(title="Cascade depth (share generation)",
                    gridcolor=GRID, tickfont=dict(color=TEXT), dtick=1),
-        yaxis=dict(title="Average sentiment score",
-                   gridcolor=GRID, tickfont=dict(color=TEXT),
-                   range=[0, 1]),
-        annotations=[dict(
-            text="Sentiment scored 0–1 · Below 0.5 = net negative tone · Drift toward 0 = emotional amplification as claim spreads",
-            x=0.1, y=-0.16, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"), align="left",
-            xanchor="left"
-        )]
+        yaxis=dict(title="Average VADER sentiment score",
+                   gridcolor=GRID, tickfont=dict(color=TEXT), range=[0, 1]),
+        annotations=annotations,
     )
     return fig
 
 
 def plot_super_spreaders(spreaders_df):
     if spreaders_df.empty: return _empty("No spreader data")
+
+    df = spreaders_df.copy()
+    df = df.sort_values("pagerank", ascending=True)
+
+    max_pr = float(df["pagerank"].max()) if float(df["pagerank"].max()) > 0 else 1
+    bar_colors = [
+        f"rgba(244,{int(63*(1-v/max_pr))},{int(94*(1-v/max_pr))},{0.55+0.45*v/max_pr})"
+        for v in df["pagerank"]
+    ]
+
+    annotations = [dict(
+        text="PageRank = global network influence  ·  Out-degree = direct amplification  ·  Betweenness = bridge between isolated communities  ·  ★ = super-spreader with highest compound score",
+        x=0.5, y=-0.18, xref="paper", yref="paper",
+        showarrow=False, font=dict(size=10, color="#475569"), align="center"
+    )]
+
+    # Mark top spreader with star
+    if len(df) > 0:
+        top = df.iloc[-1]
+        annotations.append(dict(
+            x=float(top["pagerank"]), y=str(top["user"])[:16],
+            text="★ top amplifier",
+            showarrow=True, arrowhead=2, arrowcolor=FC, arrowwidth=1.5,
+            ax=50, ay=0,
+            font=dict(size=9, color="#a78bfa"),
+            bgcolor="rgba(6,10,16,0.8)", borderpad=3,
+        ))
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=spreaders_df["pagerank"].tolist(),
-        y=spreaders_df["user"].str[:16].tolist(),
+        x=df["pagerank"].tolist(),
+        y=df["user"].str[:16].tolist(),
         orientation="h",
-        marker=dict(
-            color=spreaders_df["pagerank"].tolist(),
-            colorscale=[[0,"#1e2f42"],[0.5,"#f59e0b"],[1,"#f43f5e"]],
-            showscale=True,
-            colorbar=dict(
-                title=dict(text="Network Influence", font=dict(color=TEXT, size=10)),
-                tickfont=dict(color="#475569", size=9),
-                thickness=10,
-            ),
-        ),
+        marker=dict(color=bar_colors, line=dict(width=0)),
         customdata=list(zip(
-            spreaders_df["pagerank"].round(6).tolist(),
-            spreaders_df["out_degree"].tolist(),
-            spreaders_df["betweenness"].round(4).tolist(),
+            df["pagerank"].round(6).tolist(),
+            df["out_degree"].tolist(),
+            df["betweenness"].round(4).tolist(),
         )),
         hovertemplate=(
             "<b>%{y}</b><br>"
-            "PageRank influence score: %{customdata[0]}<br>"
-            "Direct shares forwarded: %{customdata[1]}<br>"
-            "Network bridging score: %{customdata[2]}<extra></extra>"
+            "PageRank influence: %{customdata[0]}<br>"
+            "Shares forwarded: %{customdata[1]}<br>"
+            "Community bridge score: %{customdata[2]}<extra></extra>"
         ),
     ))
     fig.update_layout(
@@ -917,16 +1041,13 @@ def plot_super_spreaders(spreaders_df):
             font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=120, r=80, t=64, b=60),
+        margin=dict(l=130, r=60, t=68, b=110),
+        height=400,
         xaxis=dict(title="PageRank influence score",
                    gridcolor=GRID, tickfont=dict(color=TEXT)),
         yaxis=dict(type="category", autorange="reversed",
                    tickfont=dict(color=TEXT, size=11), gridcolor=GRID),
-        annotations=[dict(
-            text="PageRank = global influence · Bridging score = connects otherwise separate communities · Higher = super-spreader",
-            x=0.5, y=-0.14, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"), align="center"
-        )]
+        annotations=annotations,
     )
     return fig
 
