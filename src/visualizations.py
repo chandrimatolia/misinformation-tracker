@@ -382,55 +382,87 @@ def plot_shap_importance(shap_df):
 def plot_shap_waterfall(shap_row_df, claim_text=""):
     if shap_row_df is None or (hasattr(shap_row_df,"empty") and shap_row_df.empty):
         return _empty("No SHAP data available for this claim")
-    df = shap_row_df.head(10).copy()
+    df = shap_row_df.head(8).copy()
 
     feature_labels = {
-        "n_nodes":          "Network size (unique users reached)",
-        "n_edges":          "Total shares",
-        "max_depth":        "Cascade depth",
-        "max_breadth":      "Peak breadth (max users per level)",
-        "n_communities":    "Community fragmentation",
-        "modularity":       "Echo chamber strength",
-        "median_speed_hrs": "Spread velocity (hrs between shares)",
+        "n_nodes":          "Network reach (unique users)",
+        "n_edges":          "Total propagation edges",
+        "max_depth":        "Cascade depth (share generations)",
+        "max_breadth":      "Peak breadth (users per level)",
+        "n_communities":    "Community fragmentation index",
+        "modularity":       "Echo chamber strength (modularity Q)",
+        "median_speed_hrs": "Propagation velocity (hrs/share)",
         "debunk_pct":       "Debunking resistance",
         "sentiment_drift":  "Emotional drift across cascade",
         "credibility_score":"NLP credibility score",
-        "virality_risk":    "Predicted virality risk",
+        "virality_risk":    "Composite virality risk index",
+        "alarm_word_count": "Alarm word density",
+        "credibility_word_count": "Credibility lexicon density",
     }
     df["label"] = df["feature"].map(lambda x: feature_labels.get(x, x))
-    colors = [FC if v > 0 else RC for v in df["shap"]]
+    df = df.sort_values("shap", key=abs, ascending=True)
 
-    fig = go.Figure(go.Bar(
+    colors = [FC if v > 0 else RC for v in df["shap"]]
+    bar_widths = [abs(v) for v in df["shap"]]
+
+    fig = go.Figure()
+
+    # Background zero line emphasis
+    fig.add_vline(x=0, line_color="#334155", line_width=1.5)
+
+    fig.add_trace(go.Bar(
         x=df["shap"].tolist(),
         y=df["label"].tolist(),
         orientation="h",
-        marker_color=colors,
+        marker=dict(
+            color=colors,
+            line=dict(width=0),
+            opacity=0.9,
+        ),
         textposition="none",
-        customdata=list(zip(df["value"].round(4).tolist(),
-                            df["shap"].round(5).tolist())),
+        customdata=list(zip(
+            df["value"].round(4).tolist(),
+            df["shap"].round(5).tolist(),
+            ["↑ FAKE" if v > 0 else "↓ REAL" for v in df["shap"]]
+        )),
         hovertemplate=(
             "<b>%{y}</b><br>"
-            "Feature value: %{customdata[0]}<br>"
-            "SHAP contribution: %{customdata[1]:+.5f}<br>"
-            "<i>%{customdata[1]:+.5f} toward FAKE prediction</i><extra></extra>"
+            "Feature value: <b>%{customdata[0]}</b><br>"
+            "Shapley contribution: <b>%{customdata[1]:+.5f}</b><br>"
+            "Direction: <b>%{customdata[2]}</b><extra></extra>"
         )
     ))
-    fig.add_vline(x=0, line_color="#475569", line_width=1.5)
-    ttl = f"Why was \"{claim_text[:50]}…\" flagged this way?" if claim_text else "What drove this claim's risk prediction?"
+
+    # Value labels on bars
+    for _, row in df.iterrows():
+        fig.add_annotation(
+            x=row["shap"] + (0.002 if row["shap"] > 0 else -0.002),
+            y=row["label"],
+            text=f"{row['shap']:+.3f}",
+            showarrow=False,
+            xanchor="left" if row["shap"] > 0 else "right",
+            font=dict(size=9, color=FC if row["shap"] > 0 else RC)
+        )
+
+    ttl = f'Why was "{claim_text[:45]}…" classified this way?' if len(claim_text) > 45 else f'Why was "{claim_text}" classified this way?' if claim_text else "XAI: What drove this claim's risk prediction?"
     fig.update_layout(
-        title=dict(text=ttl, font=dict(size=13, color=TEXT),
-                   x=0.5, xanchor="center"),
+        title=dict(text=ttl, font=dict(size=12, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=240, r=40, t=64, b=60),
+        margin=dict(l=220, r=80, t=56, b=80),
+        height=360,
         xaxis=dict(
-            title="SHAP contribution to fake prediction",
-            gridcolor=GRID, tickfont=dict(color=TEXT), zeroline=False),
-        yaxis=dict(type="category", autorange="reversed",
-                   tickfont=dict(color=TEXT, size=11), gridcolor=GRID),
+            title=dict(text="← pushes toward REAL    Shapley value    pushes toward FAKE →", standoff=10, font=dict(size=10)),
+            gridcolor=GRID, tickfont=dict(color="#475569", size=10), zeroline=False,
+        ),
+        yaxis=dict(
+            type="category",
+            tickfont=dict(color=TEXT, size=10),
+            gridcolor="rgba(0,0,0,0)",
+        ),
         annotations=[dict(
-            text="Red bars push prediction toward FAKE · Green bars push toward REAL · Bar length = strength of influence",
-            x=0.5, y=-0.12, xref="paper", yref="paper",
+            text="SHAP (SHapley Additive exPlanations) · Each bar = one feature's marginal contribution to fake classification · Sorted by absolute impact",
+            x=0.5, y=-0.18, xref="paper", yref="paper",
             showarrow=False, font=dict(size=9, color="#475569"), align="center"
         )]
     )
@@ -1146,41 +1178,87 @@ def plot_speaker_sankey(by_speaker_df, by_party_df, by_subject_df, claims_df):
 def plot_mutation_similarity(mutation_df):
     if mutation_df.empty: return _empty("No mutation data")
     mutation_df = mutation_df[mutation_df["similarity"] > 0].copy()
-    fig = go.Figure(go.Bar(
-        x=mutation_df["version"].tolist(),
-        y=mutation_df["similarity"].tolist(),
-        marker=dict(
-            color=mutation_df["similarity"].tolist(),
-            colorscale=[[0,"#f43f5e"],[0.5,"#fbbf24"],[1,"#10b981"]],
-            cmin=0, cmax=1, showscale=True,
-            colorbar=dict(
-                title=dict(text="Similarity", font=dict(color=TEXT, size=10)),
-                tickvals=[0, 0.5, 0.7, 1],
-                ticktext=["0 — completely different <br> (heavily mutated)", "0.5", "0.7 — threshold", "1 — identical"],
-                tickfont=dict(color="#475569", size=9),
-                thickness=12,
-            ),
-        ),
-        textposition="none",
-        hovertemplate="<b>%{x}</b><br>Similarity to original: %{y:.3f}<extra></extra>",
+    if mutation_df.empty: return _empty("No mutation data")
+
+    sims = mutation_df["similarity"].tolist()
+    versions = mutation_df["version"].tolist()
+    colors = [FC if s < 0.5 else "#fbbf24" if s < 0.7 else RC for s in sims]
+
+    fig = go.Figure()
+
+    # Danger zone shading
+    fig.add_hrect(y0=0, y1=0.7, fillcolor="rgba(244,63,94,0.04)",
+                  line_width=0, annotation_text="HIGH MUTATION ZONE",
+                  annotation_position="top left",
+                  annotation_font=dict(size=8, color="#475569"))
+
+    # Trajectory line
+    fig.add_trace(go.Scatter(
+        x=versions, y=sims,
+        mode="lines",
+        line=dict(color="#334155", width=1.5, dash="dot"),
+        showlegend=False, hoverinfo="skip"
     ))
+
+    # Points coloured by severity
+    fig.add_trace(go.Scatter(
+        x=versions, y=sims,
+        mode="markers",
+        marker=dict(
+            size=16,
+            color=sims,
+            colorscale=[[0, FC], [0.5, "#fbbf24"], [0.7, RC], [1.0, RC]],
+            cmin=0, cmax=1,
+            showscale=True,
+            colorbar=dict(
+                title=dict(text="Semantic<br>Similarity", font=dict(color=TEXT, size=9)),
+                tickvals=[0, 0.5, 0.7, 1.0],
+                ticktext=["0.0<br>mutated", "0.5", "0.7<br>threshold", "1.0<br>identical"],
+                tickfont=dict(color="#475569", size=8),
+                thickness=10, len=0.7,
+            ),
+            line=dict(width=2, color=BG),
+        ),
+        text=[f"Similarity: {s:.3f}<br>{'⚠ Below threshold' if s < 0.7 else '✓ Stable'}" for s in sims],
+        customdata=sims,
+        hovertemplate="<b>%{x}</b><br>%{text}<extra></extra>",
+        showlegend=False
+    ))
+
+    # Threshold line
     fig.add_hline(y=0.7, line_dash="dot", line_color="#fbbf24", line_width=1.5)
+
+    # Annotate drops below threshold
+    for i, (v, s) in enumerate(zip(versions, sims)):
+        if s < 0.7:
+            fig.add_annotation(
+                x=v, y=s - 0.05,
+                text=f"Δ{s:.2f}",
+                showarrow=False,
+                font=dict(size=9, color=FC),
+                yanchor="top"
+            )
+
     fig.update_layout(
         title=dict(
-            text="How much does this claim mutate as it spreads through the network?",
-            font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
+            text="How much does this claim mutate as it propagates through the network?",
+            font=dict(size=12, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=56, r=80, t=64, b=100),
-        xaxis=dict(title=dict(text="Mutation version", standoff=15),
-                   gridcolor=GRID, tickfont=dict(color=TEXT)),
-        yaxis=dict(title="Cosine similarity to original",
-                   range=[0, 1], gridcolor=GRID, tickfont=dict(color=TEXT)),
+        margin=dict(l=56, r=90, t=56, b=100),
+        height=360,
+        xaxis=dict(
+            title=dict(text="Propagated variant", standoff=15),
+            gridcolor=GRID, tickfont=dict(color=TEXT), type="category"),
+        yaxis=dict(
+            title="Cosine similarity to source claim",
+            range=[-0.05, 1.1], gridcolor=GRID, tickfont=dict(color=TEXT),
+            tickformat=".1f"
+        ),
         annotations=[dict(
-            text=" · Dotted line = 70% similarity threshold below which the claim has meaningfully changed",
-            x=0.5, y=-0.18, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"),
-            align="center"
+            text="Cosine similarity via TF-IDF · Points below 0.7 threshold indicate significant semantic drift · Red = heavily mutated · Green = semantically stable",
+            x=0.5, y=-0.22, xref="paper", yref="paper",
+            showarrow=False, font=dict(size=9, color="#475569"), align="center"
         )]
     )
     return fig
