@@ -350,7 +350,7 @@ def plot_shap_importance(shap_df):
 
     annotations = [
         dict(x=0.5, y=-0.12, xref="paper", yref="paper",
-             text="Mean |SHAP| = average absolute Shapley value across 200 claims  ·  Higher = stronger driver of fake/real classification  ·  ★ = dominant global predictor",
+             text="Mean |SHAP| = average absolute Shapley value across 200 claims  ·  Higher = stronger driver of fake/real classification <br> ·  ★ = dominant global predictor",
              showarrow=False, font=dict(size=10, color="#475569"), align="center"),
     ]
     # Star on top feature
