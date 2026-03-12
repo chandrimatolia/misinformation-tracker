@@ -385,130 +385,138 @@ def plot_shap_waterfall(shap_row_df, claim_text=""):
     df = shap_row_df.head(8).copy()
 
     feature_labels = {
-        "n_nodes":               "Network reach (unique users)",
-        "n_edges":               "Total propagation edges",
-        "max_depth":             "Cascade depth (share generations)",
-        "max_breadth":           "Peak breadth (users per level)",
-        "n_communities":         "Community fragmentation index",
-        "modularity":            "Echo chamber strength (modularity Q)",
-        "median_speed_hrs":      "Propagation velocity (hrs/share)",
+        "n_nodes":               "Network reach",
+        "n_edges":               "Propagation edges",
+        "max_depth":             "Cascade depth",
+        "max_breadth":           "Peak breadth",
+        "n_communities":         "Community fragmentation",
+        "modularity":            "Echo chamber strength",
+        "median_speed_hrs":      "Propagation velocity",
         "debunk_pct":            "Debunking resistance",
-        "sentiment_drift":       "Emotional drift across cascade",
+        "sentiment_drift":       "Emotional drift",
         "credibility_score":     "NLP credibility score",
-        "virality_risk":         "Composite virality risk index",
+        "virality_risk":         "Virality risk index",
         "alarm_word_count":      "Alarm word density",
-        "credibility_word_count":"Credibility lexicon density",
+        "credibility_word_count":"Credibility lexicon",
     }
     df["label"] = df["feature"].map(lambda x: feature_labels.get(x, x))
     df = df.sort_values("shap", key=abs, ascending=True)
 
-    vals   = df["shap"].tolist()
-    labels = df["label"].tolist()
+    vals      = df["shap"].tolist()
+    labels    = df["label"].tolist()
     feat_vals = df["value"].round(3).tolist()
-    n = len(vals)
-    x_abs_max = max(abs(v) for v in vals) * 1.35 if vals else 0.3
+    n         = len(vals)
+    # Give 60% extra room so labels never fall inside a bar
+    x_max     = max(abs(v) for v in vals) * 1.6 if vals else 0.3
 
     fig = go.Figure()
 
-    # ── Diverging background zones ─────────────────────────────────────────────
-    fig.add_vrect(x0=0,           x1=x_abs_max,  fillcolor="rgba(244,63,94,0.05)",  line_width=0)
-    fig.add_vrect(x0=-x_abs_max,  x1=0,          fillcolor="rgba(16,185,129,0.05)", line_width=0)
+    # ── Diverging background zones ────────────────────────────────────────────
+    # Use paper refs so they always fill half the plot regardless of scale
+    fig.add_vrect(x0=0,      x1=x_max,  fillcolor="rgba(244,63,94,0.06)",  line_width=0)
+    fig.add_vrect(x0=-x_max, x1=0,      fillcolor="rgba(16,185,129,0.06)", line_width=0)
 
-    # Zone labels at top
-    fig.add_annotation(x=x_abs_max*0.5,  y=n-0.1, xref="x", yref="y",
-        text="PUSHES → FAKE", showarrow=False,
-        font=dict(size=8, color=FC), xanchor="center")
-    fig.add_annotation(x=-x_abs_max*0.5, y=n-0.1, xref="x", yref="y",
-        text="PUSHES → REAL", showarrow=False,
-        font=dict(size=8, color=RC), xanchor="center")
+    # Zone header labels: pinned to paper top, well above bars, never in data space
+    # Use yref="paper" so y=1.0 is the very top of the plot area
+    fig.add_annotation(
+        x=x_max * 0.5, y=1.0, xref="x", yref="paper",
+        text="▶  FAKE", showarrow=False,
+        font=dict(size=9, color=FC, family="DM Mono, monospace"),
+        xanchor="center", yanchor="top",
+        yshift=-4,
+    )
+    fig.add_annotation(
+        x=-x_max * 0.5, y=1.0, xref="x", yref="paper",
+        text="REAL  ◀", showarrow=False,
+        font=dict(size=9, color=RC, family="DM Mono, monospace"),
+        xanchor="center", yanchor="top",
+        yshift=-4,
+    )
 
-    # ── Reference: zero line ──────────────────────────────────────────────────
+    # ── Zero line ─────────────────────────────────────────────────────────────
     fig.add_vline(x=0, line_color="#334155", line_width=2)
 
-    # ── Bars ──────────────────────────────────────────────────────────────────
+    # ── Intensity-graded bars ────────────────────────────────────────────────
+    max_abs = max(abs(v) for v in vals) if vals else 1
     bar_colors = []
     for v in vals:
-        abs_frac = abs(v) / (max(abs(vv) for vv in vals) if vals else 1)
+        t = abs(v) / max_abs
         if v > 0:
-            # fake direction: dark→bright red
-            r = int(180 + 64*abs_frac); g = int(30*(1-abs_frac)); b = int(60*(1-abs_frac))
-            bar_colors.append(f"rgb({r},{g},{b})")
+            bar_colors.append(f"rgba(244,{int(63*(1-t))},{int(94*(1-t))},{0.55+0.4*t})")
         else:
-            r = int(10*(1-abs_frac)); g = int(140 + 45*abs_frac); b = int(90 + 40*abs_frac)
-            bar_colors.append(f"rgb({r},{g},{b})")
+            bar_colors.append(f"rgba({int(16*(1-t))},{int(130+55*t)},{int(80+49*t)},{0.55+0.4*t})")
 
     fig.add_trace(go.Bar(
-        x=vals, y=labels,
-        orientation="h",
-        marker=dict(color=bar_colors, line=dict(width=0), opacity=0.92),
+        x=vals, y=labels, orientation="h",
+        marker=dict(color=bar_colors, line=dict(width=0)),
         textposition="none",
-        customdata=list(zip(
-            feat_vals,
-            [f"{v:+.4f}" for v in vals],
-            ["→ FAKE" if v > 0 else "→ REAL" for v in vals],
-            [f"rank #{n-i}" for i in range(n)]
-        )),
+        customdata=list(zip(feat_vals, [f"{v:+.4f}" for v in vals],
+                            ["→ FAKE" if v > 0 else "→ REAL" for v in vals])),
         hovertemplate=(
             "<b>%{y}</b><br>"
-            "Feature value: <b>%{customdata[0]}</b><br>"
-            "Shapley contribution: <b>%{customdata[1]}</b><br>"
-            "Direction: <b>%{customdata[2]}</b><br>"
-            "<i>%{customdata[3]} most influential</i><extra></extra>"
+            "Raw value: <b>%{customdata[0]}</b><br>"
+            "Shapley: <b>%{customdata[1]}</b><br>"
+            "%{customdata[2]}<extra></extra>"
         )
     ))
 
-    # ── Value chips on bars ───────────────────────────────────────────────────
-    for i, (v, lbl, fv) in enumerate(zip(vals, labels, feat_vals)):
-        offset = x_abs_max * 0.04
-        # SHAP value label
+    # ── Value labels: placed at fixed distance BEYOND bar end ─────────────────
+    # pad = 4% of x_max so they never overlap the bar itself
+    pad = x_max * 0.04
+    for i, (v, lbl) in enumerate(zip(vals, labels)):
+        is_dominant = (i == len(vals) - 1)
+        # For dominant predictor, combine ★ + value in one annotation to avoid stacking
+        label_text = f"★ {v:+.3f}" if is_dominant else f"{v:+.3f}"
+        label_color = "#a78bfa" if is_dominant else "#94a3b8"
         fig.add_annotation(
-            x=v + (offset if v >= 0 else -offset), y=lbl,
-            text=f"<b>{v:+.3f}</b>",
-            showarrow=False, xanchor="left" if v >= 0 else "right",
-            font=dict(size=9, color="#e2e8f0")
-        )
-        # Feature value chip on the left margin
-        fig.add_annotation(
-            x=-x_abs_max, y=lbl,
-            text=f"val={fv}",
-            showarrow=False, xanchor="right",
-            font=dict(size=8, color="#475569")
-        )
-
-    # ── Dominant predictor callout arrow ─────────────────────────────────────
-    if vals:
-        dom_v = vals[-1]; dom_l = labels[-1]
-        fig.add_annotation(
-            x=dom_v, y=dom_l,
-            text=f"★ Dominant predictor",
-            showarrow=True, arrowhead=2, arrowwidth=1.5,
-            arrowcolor="#a78bfa",
-            ax=0, ay=-32,
-            font=dict(size=9, color="#a78bfa")
+            x=v + (pad if v >= 0 else -pad),
+            y=lbl,
+            text=label_text,
+            showarrow=False,
+            xanchor="left" if v >= 0 else "right",
+            yanchor="middle",
+            font=dict(size=9, color=label_color),
         )
 
-    ttl = (f'"{claim_text[:50]}…"' if len(claim_text) > 50 else f'"{claim_text}"') if claim_text else "This claim"
+    # ── Raw feature value chips: pinned to far LEFT margin (outside plot area) ─
+    # xref="paper" x=-0.01 places them just left of the y-axis tick labels
+    # This ensures they never collide with bars
+    for fv, lbl in zip(feat_vals, labels):
+        fig.add_annotation(
+            x=-0.01, y=lbl, xref="paper", yref="y",
+            text=f"{fv}",
+            showarrow=False,
+            xanchor="right", yanchor="middle",
+            font=dict(size=8, color="#475569"),
+        )
+
+    short_claim = (claim_text[:52] + "…") if len(claim_text) > 52 else claim_text
     fig.update_layout(
         title=dict(
-            text=f"XAI Attribution — what drove the model's verdict on {ttl}?",
+            text=f'Why was "{short_claim}" classified this way?' if claim_text else "XAI: Feature attribution",
             font=dict(size=12, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=230, r=100, t=56, b=80),
-        height=390,
+        # l=190 for y-axis label + feature value chips; r=80 for +value labels
+        margin=dict(l=190, r=80, t=72, b=100),
+        height=400,
         xaxis=dict(
-            title=dict(text="← REAL  ·  Shapley Additive Explanation value  ·  FAKE →",
-                       font=dict(size=10), standoff=10),
-            range=[-x_abs_max*1.4, x_abs_max*1.4],
-            gridcolor=GRID, tickfont=dict(color="#475569", size=9),
-            zeroline=False, showline=True, linecolor=GRID),
+            title=dict(text="← REAL  ·  Shapley value  ·  FAKE →", font=dict(size=10), standoff=10),
+            range=[-x_max * 1.7, x_max * 1.7],
+            gridcolor=GRID, tickfont=dict(color="#475569", size=9), zeroline=False,
+        ),
         yaxis=dict(
             type="category",
             tickfont=dict(color=TEXT, size=10),
-            gridcolor="rgba(0,0,0,0)"),
+            gridcolor="rgba(0,0,0,0)",
+        ),
         annotations=[dict(
-            text="SHAP (SHapley Additive exPlanations) quantifies each feature's marginal contribution via cooperative game theory · Bar length = magnitude · Direction = pushes toward FAKE (right) or REAL (left) · val= shows raw feature value · ★ = dominant predictor",
-            x=0.5, y=-0.18, xref="paper", yref="paper",
+            text=(
+                "SHAP: each bar = one feature's marginal Shapley contribution  ·  "
+                "bar length = magnitude  ·  ★ = dominant predictor  ·  "
+                "left values = raw feature value  ·  hover for details"
+            ),
+            x=0.5, y=-0.2, xref="paper", yref="paper",
             showarrow=False, font=dict(size=9, color="#475569"), align="center"
         )]
     )
@@ -1226,113 +1234,153 @@ def plot_mutation_similarity(mutation_df):
     df = mutation_df[mutation_df["similarity"] > 0].copy()
     if df.empty: return _empty("No mutation data")
 
-    sims   = df["similarity"].tolist()
-    vs     = df["version"].tolist()
-    n      = len(sims)
-    xs     = list(range(n))  # numeric for regression
+    sims    = df["similarity"].tolist()
+    vs      = df["version"].tolist()
+    n       = len(sims)
+    xs      = list(range(n))
 
     fig = go.Figure()
 
     # ── Zone shading ──────────────────────────────────────────────────────────
-    fig.add_hrect(y0=0,    y1=0.5,  fillcolor="rgba(244,63,94,0.07)",  line_width=0)
-    fig.add_hrect(y0=0.5,  y1=0.7,  fillcolor="rgba(251,191,36,0.06)", line_width=0)
-    fig.add_hrect(y0=0.7,  y1=1.05, fillcolor="rgba(16,185,129,0.04)", line_width=0)
+    fig.add_hrect(y0=0,    y1=0.5,  fillcolor="rgba(244,63,94,0.08)",  line_width=0)
+    fig.add_hrect(y0=0.5,  y1=0.7,  fillcolor="rgba(251,191,36,0.07)", line_width=0)
+    fig.add_hrect(y0=0.7,  y1=1.08, fillcolor="rgba(16,185,129,0.05)", line_width=0)
 
-    # Zone labels (right edge)
-    for y, label, col in [(0.25,"HEAVY MUTATION",FC),(0.6,"MODERATE DRIFT","#fbbf24"),(0.875,"STABLE",RC)]:
-        fig.add_annotation(x=1.01, y=y, xref="paper", yref="y",
+    # Zone labels: pinned to right edge (xref="paper"), y in data coords, with
+    # dark background chips so they never bleed into the data area
+    for y_mid, label, col in [
+        (0.25,  "HEAVY MUTATION", FC),
+        (0.595, "MODERATE DRIFT", "#fbbf24"),
+        (0.875, "STABLE",         RC),
+    ]:
+        fig.add_annotation(
+            x=0.99, y=y_mid, xref="paper", yref="y",
             text=label, showarrow=False,
-            font=dict(size=8, color=col), xanchor="left", textangle=-90)
+            font=dict(size=8, color=col, family="DM Mono, monospace"),
+            xanchor="right", yanchor="middle",
+            bgcolor="rgba(6,10,16,0.75)", borderpad=3,
+        )
 
     # ── Threshold line ────────────────────────────────────────────────────────
     fig.add_hline(y=0.7, line_dash="dash", line_color="#fbbf24", line_width=1.5)
-    fig.add_annotation(x=0.01, y=0.705, xref="paper", yref="y",
-        text="70% THRESHOLD — below this, claim has meaningfully mutated",
-        showarrow=False, font=dict(size=8, color="#fbbf24"), xanchor="left")
+    # Label pinned to left at y=0.69 (below the line so it doesn't clash with
+    # data point labels which default to "top center")
+    fig.add_annotation(
+        x=0.01, y=0.69, xref="paper", yref="y",
+        text="── 70% stability threshold",
+        showarrow=False, font=dict(size=8, color="#fbbf24"),
+        xanchor="left", yanchor="top",
+        bgcolor="rgba(6,10,16,0.75)", borderpad=2,
+    )
 
     # ── Stable reference line ─────────────────────────────────────────────────
-    fig.add_hline(y=1.0, line_dash="dot", line_color=RC, line_width=1, opacity=0.4)
+    fig.add_hline(y=1.0, line_dash="dot", line_color=RC, line_width=1, opacity=0.3)
 
-    # ── Trend line (linear regression) ────────────────────────────────────────
+    # ── Trend line ────────────────────────────────────────────────────────────
     if n >= 2:
         import numpy as _np
         m, b = _np.polyfit(xs, sims, 1)
         trend_y = [m*x + b for x in xs]
         fig.add_trace(go.Scatter(
             x=vs, y=trend_y, mode="lines",
-            name=f"Trend  (slope={m:+.3f}/version)",
-            line=dict(color="#94a3b8", width=1.5, dash="dot"),
+            name=f"Trend (slope {m:+.3f}/hop)",
+            line=dict(color="#64748b", width=1.5, dash="dot"),
             hoverinfo="skip"
         ))
-        # Annotate trend direction
-        trend_label = "↓ Accelerating drift" if m < -0.05 else ("↑ Recovering" if m > 0.05 else "→ Stable drift")
-        fig.add_annotation(x=vs[-1], y=trend_y[-1] + 0.04,
-            text=trend_label, showarrow=False,
-            font=dict(size=9, color="#94a3b8"), xanchor="right")
+        # Trend direction label at end of line, offset above/below so it
+        # doesn't clash with the final data point label
+        direction = "↓ Accelerating drift" if m < -0.05 else ("↑ Recovery" if m > 0.05 else "→ Stable")
+        fig.add_annotation(
+            x=vs[-1], y=trend_y[-1],
+            text=direction,
+            showarrow=False,
+            xanchor="right", yanchor="top",
+            yshift=-14,
+            font=dict(size=8, color="#64748b"),
+            bgcolor="rgba(6,10,16,0.75)", borderpad=2,
+        )
 
-    # ── Connecting dashes ─────────────────────────────────────────────────────
+    # ── Connecting line ───────────────────────────────────────────────────────
     fig.add_trace(go.Scatter(
         x=vs, y=sims, mode="lines",
-        line=dict(color="#1e3a5f", width=1),
+        line=dict(color="#1e3a5f", width=2),
         showlegend=False, hoverinfo="skip"
     ))
 
-    # ── Data points ───────────────────────────────────────────────────────────
+    # ── Data points — labels alternated above/below to avoid collision ────────
     point_colors = [FC if s < 0.5 else "#fbbf24" if s < 0.7 else RC for s in sims]
-    first_drop = next((vs[i] for i,s in enumerate(sims) if s < 0.7), None)
+    # Alternate text position: even indices top, odd indices bottom
+    # but also push below-threshold points to bottom to avoid threshold label
+    text_positions = []
+    for i, s in enumerate(sims):
+        if s < 0.72 and s > 0.65:
+            text_positions.append("bottom center")   # near threshold → go below
+        elif i % 2 == 0:
+            text_positions.append("top center")
+        else:
+            text_positions.append("bottom center")
 
     fig.add_trace(go.Scatter(
-        x=vs, y=sims, mode="markers+text",
+        x=vs, y=sims,
+        mode="markers+text",
         marker=dict(
-            size=14, color=point_colors,
+            size=13, color=point_colors,
             line=dict(width=2, color=BG),
             symbol=["diamond" if s < 0.7 else "circle" for s in sims]
         ),
         text=[f"{s:.2f}" for s in sims],
-        textposition=["top center" if s >= 0.5 else "bottom center" for s in sims],
+        textposition=text_positions,
         textfont=dict(size=9, color=point_colors),
-        customdata=list(zip(sims,
-            ["⚠ HEAVILY MUTATED" if s<0.5 else "⚠ DRIFTED" if s<0.7 else "✓ STABLE" for s in sims])),
-        hovertemplate="<b>%{x}</b><br>Similarity: <b>%{customdata[0]:.3f}</b><br>Status: <b>%{customdata[1]}</b><extra></extra>",
+        customdata=[("⚠ MUTATED" if s < 0.7 else "✓ STABLE") for s in sims],
+        hovertemplate="<b>%{x}</b><br>Similarity: <b>%{y:.3f}</b><br>%{customdata}<extra></extra>",
         showlegend=False
     ))
 
-    # ── Annotate first threshold breach ──────────────────────────────────────
-    if first_drop:
-        fig.add_annotation(x=first_drop, y=0.72,
-            text="◀ First threshold breach",
+    # ── First threshold-breach arrow callout ──────────────────────────────────
+    first_breach = next(((v, s) for v, s in zip(vs, sims) if s < 0.7), None)
+    if first_breach:
+        bv, bs = first_breach
+        fig.add_annotation(
+            x=bv, y=bs,
+            text="First breach",
             showarrow=True, arrowhead=2, arrowcolor=FC, arrowwidth=1.5,
-            ax=40, ay=-30, font=dict(size=9, color=FC))
-
-    # ── Annotate min point ────────────────────────────────────────────────────
-    if sims:
-        min_s, min_v = min(zip(sims, vs))
-        if min_s < 0.95:
-            fig.add_annotation(x=min_v, y=min_s - 0.07,
-                text=f"Min: {min_s:.2f}",
-                showarrow=False, font=dict(size=8, color=FC), yanchor="top")
+            ax=38, ay=30,   # arrow comes from below-right so it clears the point label
+            font=dict(size=8, color=FC),
+            bgcolor="rgba(6,10,16,0.75)", borderpad=2,
+        )
 
     below = sum(1 for s in sims if s < 0.7)
     fig.update_layout(
         title=dict(
-            text=f"Semantic mutation trajectory across {n} propagated variant{'s' if n!=1 else ''} — {below} breach{'es' if below!=1 else ''} of 70% stability threshold",
+            text=f"Semantic mutation across {n} propagated variants — {below}/{n} breach the 70% stability threshold",
             font=dict(size=12, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=60, r=80, t=64, b=90),
-        height=390,
-        legend=dict(bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID, borderwidth=1,
-                    font=dict(size=10, color=TEXT), x=0.01, y=0.01, xanchor="left"),
-        xaxis=dict(title=dict(text="Propagated variant (diffusion hop)", standoff=12),
-                   gridcolor=GRID, tickfont=dict(color=TEXT), type="category",
-                   showline=True, linecolor=GRID),
-        yaxis=dict(title="TF-IDF cosine similarity to source claim",
-                   range=[-0.05, 1.12], gridcolor=GRID, tickfont=dict(color=TEXT),
-                   tickformat=".1f", dtick=0.1,
-                   showline=True, linecolor=GRID),
+        # t=68 for title; b=110 gives full room for two-line annotation
+        margin=dict(l=64, r=30, t=68, b=110),
+        height=420,
+        legend=dict(
+            bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID, borderwidth=1,
+            font=dict(size=10, color=TEXT), x=0.01, y=0.13,
+            xanchor="left", yanchor="bottom"
+        ),
+        xaxis=dict(
+            title=dict(text="Propagated variant (diffusion hop)", standoff=8),
+            gridcolor=GRID, tickfont=dict(color=TEXT), type="category"
+        ),
+        yaxis=dict(
+            title="TF-IDF cosine similarity to source",
+            range=[-0.05, 1.13], gridcolor=GRID,
+            tickfont=dict(color=TEXT), dtick=0.1
+        ),
         annotations=[dict(
-            text=f"TF-IDF cosine similarity · ◆ diamond = below 70% threshold · Shading: green = stable (>0.7) · amber = moderate drift (0.5–0.7) · red = heavy mutation (<0.5) · {below}/{n} variants show meaningful semantic drift",
-            x=0.5, y=-0.2, xref="paper", yref="paper",
+            text=(
+                "TF-IDF cosine similarity  ·  ◆ diamond = below 70% threshold"
+                "  ·  Zone shading: <span style='color:#10b981'>■ stable &gt;0.7</span>"
+                "  ·  <span style='color:#fbbf24'>■ moderate drift 0.5–0.7</span>"
+                "  ·  <span style='color:#f43f5e'>■ heavy mutation &lt;0.5</span>"
+            ),
+            x=0.5, y=-0.22, xref="paper", yref="paper",
             showarrow=False, font=dict(size=9, color="#475569"), align="center"
         )]
     )

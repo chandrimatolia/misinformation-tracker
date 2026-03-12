@@ -316,11 +316,11 @@
           </div>
 
           <!-- Visual spectrum bar with needle -->
-          <div style="margin:16px 0 8px">
-            <div style="position:relative;height:20px;border-radius:10px;overflow:visible;background:linear-gradient(to right,#10b981 0%,#10b981 34%,#fbbf24 34%,#fbbf24 65%,#f43f5e 65%,#f43f5e 100%);opacity:0.85">
-              <div id="threat-needle" style="position:absolute;top:-4px;width:3px;height:28px;background:white;border-radius:2px;box-shadow:0 0 6px rgba(255,255,255,0.6);transition:left .8s ease;left:0%"></div>
+          <div style="margin:16px 0 12px;padding:6px 0">
+            <div style="position:relative;height:16px;border-radius:8px;background:linear-gradient(to right,#10b981 0%,#10b981 34%,#fbbf24 34%,#fbbf24 65%,#f43f5e 65%,#f43f5e 100%);opacity:0.9">
+              <div id="threat-needle" style="position:absolute;top:-6px;width:4px;height:28px;background:white;border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,0.9),0 0 2px rgba(0,0,0,0.5);transition:left .9s cubic-bezier(.34,1.56,.64,1);left:0%;margin-left:-2px;z-index:10"></div>
             </div>
-            <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--muted);margin-top:4px"><span>0</span><span>34</span><span>65</span><span>100</span></div>
+            <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--muted);margin-top:6px;padding:0 2px"><span>0</span><span style="margin-left:28%">34</span><span style="margin-left:22%">65</span><span>100</span></div>
           </div>
 
           <!-- Score + label -->
