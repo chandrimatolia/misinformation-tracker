@@ -349,7 +349,7 @@ def plot_shap_importance(shap_df):
     ]
 
     annotations = [
-        dict(x=0.5, y=-0.12, xref="paper", yref="paper",
+        dict(x=0.5, y=-0.22, xref="paper", yref="paper",
              text="Mean |SHAP| = average absolute Shapley value across 200 claims  ·  Higher = stronger driver of fake/real classification <br> ·  ★ = dominant global predictor",
              showarrow=False, font=dict(size=10, color="#475569"), align="center"),
     ]
@@ -1001,7 +1001,7 @@ def plot_super_spreaders(spreaders_df):
 
     annotations = [dict(
         text="PageRank = global network influence  ·  Out-degree = direct amplification  ·  Betweenness = bridge between isolated communities <br> ·  ★ = super-spreader with highest compound score",
-        x=0.5, y=-0.26, xref="paper", yref="paper",
+        x=0.5, y=-0.28, xref="paper", yref="paper",
         showarrow=False, font=dict(size=10, color="#475569"), align="center"
     )]
 
