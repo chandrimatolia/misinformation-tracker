@@ -778,8 +778,9 @@ function renderPlotly(divId, figJson) {
   if (!figJson || Object.keys(figJson).length === 0) return;
   try {
     const fig = typeof figJson === 'string' ? JSON.parse(figJson) : figJson;
+    // Purge any existing plot first, then use react for a fully clean render
+    Plotly.purge(divId);
     Plotly.newPlot(divId, fig.data || [], fig.layout || {}, {responsive: true, displayModeBar: false});
-    // If figure has frames (animation), add them after initial render
     if (fig.frames && fig.frames.length > 0) {
       Plotly.addFrames(divId, fig.frames);
     }
