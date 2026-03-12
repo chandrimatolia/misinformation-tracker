@@ -274,50 +274,100 @@ def plot_sankey_platform_flow(spread_df, claim_id=None):
 # ── 4. HEATMAP SPREAD ─────────────────────────────────────────────────────────
 
 def plot_heatmap_spread(claim_id, spread_df, label="fake"):
-    edges = spread_df[spread_df["claim_id"]==claim_id].copy()
+    """
+    Hour-of-day x Cascade depth heatmap — reference quality.
+    Peak cell callout arrow, time-band zone labels, custom dark colorscale.
+    """
+    import numpy as _np
+    edges = spread_df[spread_df["claim_id"] == claim_id].copy()
     if edges.empty:
         return _empty("No data for heatmap")
+
     edges["hour_of_day"] = pd.to_datetime(
         edges["timestamp"], errors="coerce").dt.hour.fillna(0).astype(int)
     edges["depth_bin"] = edges["depth"].fillna(0).astype(int).clip(0, 8)
-    pivot = (edges.groupby(["depth_bin","hour_of_day"])
+    pivot = (edges.groupby(["depth_bin", "hour_of_day"])
                   .size().unstack(fill_value=0))
+
+    hours_str  = [f"{h:02d}:00" for h in pivot.columns.tolist()]
+    depths_str = [f"Depth {d}" for d in pivot.index.tolist()]
+    z_vals     = pivot.values.tolist()
+
+    # Find peak cell
+    flat = pivot.values
+    if flat.max() > 0:
+        peak_row, peak_col = _np.unravel_index(flat.argmax(), flat.shape)
+        peak_depth = depths_str[peak_row]
+        peak_hour  = hours_str[peak_col]
+        peak_val   = int(flat[peak_row, peak_col])
+    else:
+        peak_row = peak_col = peak_val = 0
+        peak_depth = "Depth 0"; peak_hour = "00:00"
+
+    colorscale = (
+        [[0.0, BG], [0.15, "#1a0a0e"], [0.40, "#7f1d1d"], [0.70, "#dc2626"], [1.0, "#fca5a5"]]
+        if label == "fake" else
+        [[0.0, BG], [0.15, "#052e16"], [0.40, "#166534"], [0.70, "#16a34a"], [1.0, "#86efac"]]
+    )
+
     fig = go.Figure(go.Heatmap(
-        z=pivot.values.tolist(),
-        x=[f"{h:02d}:00" for h in pivot.columns.tolist()],
-        y=[f"Depth {d}" for d in pivot.index.tolist()],
-        colorscale="Reds" if label=="fake" else "Greens",
-        zmin=0,
-        hovertemplate="<b>%{y} · %{x}</b><br>Shares: %{z}<extra></extra>",
+        z=z_vals, x=hours_str, y=depths_str,
+        colorscale=colorscale, zmin=0,
+        hovertemplate="<b>%{y}  ·  %{x}</b><br>Share events: <b>%{z}</b><extra></extra>",
         colorbar=dict(
             title=dict(text="Share volume", font=dict(color=TEXT, size=10)),
-            tickfont=dict(color="#475569", size=9),
-            thickness=12,
+            tickfont=dict(color="#475569", size=9), thickness=12, len=0.85,
         ),
     ))
+
+    # Peak cell callout
+    annotations = [
+        dict(
+            x=peak_hour, y=peak_depth,
+            text=f"★ PEAK<br>{peak_val} shares",
+            showarrow=True, arrowhead=2, arrowcolor="white", arrowwidth=1.5,
+            ax=50, ay=-38,
+            font=dict(size=9, color="white", family="DM Mono, monospace"),
+            bgcolor="rgba(6,10,16,0.88)", borderpad=4,
+            bordercolor="rgba(255,255,255,0.25)", borderwidth=1,
+        ),
+    ]
+
+    # Time-band labels across top of chart
+    time_bands = [("00:00","06:00","NIGHT"),("07:00","11:00","MORNING"),
+                  ("12:00","17:00","AFTERNOON"),("18:00","23:00","EVENING")]
+    for band_start, band_end, band_label in time_bands:
+        cols_in = [i for i, h in enumerate(hours_str) if band_start <= h <= band_end]
+        if not cols_in: continue
+        mid = hours_str[cols_in[len(cols_in)//2]]
+        annotations.append(dict(
+            x=mid, y=len(depths_str) - 0.3,
+            text=band_label, showarrow=False, xanchor="center", yanchor="bottom",
+            font=dict(size=7, color="#475569", family="DM Mono, monospace"),
+        ))
+
+    # Footer — concise, won't overflow
+    annotations.append(dict(
+        x=0.5, y=-0.20, xref="paper", yref="paper",
+        text="Darker = more shares  ·  Diagonal pattern = cascade deepening through the day  ·  ★ = peak amplification window",
+        showarrow=False, font=dict(size=10, color="#475569"), align="center",
+    ))
+
     fig.update_layout(
         title=dict(
             text="At what time of day does misinformation penetrate deepest into the network?",
             font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=80, r=60, t=64, b=100),
-        xaxis=dict(title="Hour of day (UTC)", gridcolor=GRID,
-                   type="category", tickfont=dict(color=TEXT, size=9),
-                   tickangle=-45),
-        yaxis=dict(title="Cascade depth", gridcolor=GRID,
-                   type="category", tickfont=dict(color=TEXT)),
-        annotations=[dict(
-            text="Darker cells = more shares at that depth and hour · Diagonal pattern = cascade deepens through the day · Brightest cell = peak amplification window",
-            x=0.5, y=-0.18, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"),
-            align="center"
-        )]
+        margin=dict(l=88, r=72, t=72, b=100),
+        height=420,
+        xaxis=dict(title="Hour of day (UTC)", gridcolor=GRID, type="category",
+                   tickfont=dict(color=TEXT, size=9), tickangle=-45),
+        yaxis=dict(title="Cascade depth", gridcolor=GRID, type="category",
+                   tickfont=dict(color=TEXT, size=10)),
+        annotations=annotations,
     )
     return fig
-
-
-# ── 5. SHAP IMPORTANCE ────────────────────────────────────────────────────────
 
 def plot_shap_importance(shap_df):
     if shap_df is None or (hasattr(shap_df,"empty") and shap_df.empty):
@@ -824,6 +874,11 @@ def plot_cascade_timeline(claim_id, spread_df, label="fake"):
 
 
 def plot_fake_vs_real(summary_df):
+    """
+    Diverging lollipop dot-plot: one row per metric, Real dot (green) and Fake dot (red)
+    connected by a gap line. Ratio badge embedded in data space. No footer annotation
+    (insight bar above the chart already carries the caption).
+    """
     if summary_df.empty or "metric" not in summary_df.columns:
         return _empty("Not enough data")
 
@@ -836,78 +891,90 @@ def plot_fake_vs_real(summary_df):
         "median_speed_hrs": "Spread velocity (hrs to 50%)",
         "debunk_pct":       "Debunking resistance (%)",
         "virality_score":   "Virality composite score",
-        "sentiment_drift":  "Emotional drift",
     }
-    summary_df = summary_df.copy()
-    exclude = ["emotional_drift", "sentiment_drift"]
-    summary_df = summary_df[~summary_df["metric"].isin(exclude)]
-    summary_df = summary_df[summary_df[["fake","real"]].max(axis=1) > 0]
-    summary_df["metric"] = summary_df["metric"].map(lambda x: metric_labels.get(x, x))
+    df = summary_df.copy()
+    df = df[~df["metric"].isin(["emotional_drift", "sentiment_drift"])]
+    df = df[df[["fake", "real"]].max(axis=1) > 0]
+    df["metric"] = df["metric"].map(lambda x: metric_labels.get(x, x))
+    df = df.sort_values("fake", ascending=True).reset_index(drop=True)
+
+    metrics = df["metric"].tolist()
+    fv      = df["fake"].tolist()
+    rv      = df["real"].tolist()
+    ratios  = [f / max(r, 0.01) for f, r in zip(fv, rv)]
+    max_ratio = max(ratios) if ratios else 1
+    x_max   = max(max(fv), max(rv)) * 1.18
 
     fig = go.Figure()
 
-    # Fake bars
-    if "fake" in summary_df.columns:
-        fig.add_trace(go.Bar(
-            name="Fake News",
-            x=summary_df["fake"].tolist(),
-            y=summary_df["metric"].tolist(),
-            orientation="h",
-            marker=dict(
-                color=[FC] * len(summary_df),
-                opacity=[0.55 + 0.45 * (v / summary_df["fake"].max()) for v in summary_df["fake"]],
-                line=dict(width=0)
-            ),
-            hovertemplate="<b>%{y}</b><br>Fake avg: <b>%{x:.2f}</b><extra></extra>",
-        ))
-    # Real bars
-    if "real" in summary_df.columns:
-        fig.add_trace(go.Bar(
-            name="Real News",
-            x=summary_df["real"].tolist(),
-            y=summary_df["metric"].tolist(),
-            orientation="h",
-            marker=dict(
-                color=[RC] * len(summary_df),
-                opacity=[0.55 + 0.45 * (v / max(summary_df["real"].max(), 1e-9)) for v in summary_df["real"]],
-                line=dict(width=0)
-            ),
-            hovertemplate="<b>%{y}</b><br>Real avg: <b>%{x:.2f}</b><extra></extra>",
+    # Gap lines — colour intensity scales with ratio
+    for m, f, r, ratio in zip(metrics, fv, rv, ratios):
+        intensity = min(1.0, ratio / max(max_ratio, 1))
+        alpha = 0.25 + 0.45 * intensity
+        line_col = f"rgba(244,63,94,{alpha:.2f})" if f > r else f"rgba(16,185,129,{alpha:.2f})"
+        fig.add_trace(go.Scatter(
+            x=[r, f], y=[m, m], mode="lines",
+            line=dict(color=line_col, width=3.5),
+            showlegend=False, hoverinfo="skip",
         ))
 
-    # Ratio annotations on the right side for each metric
-    if "fake" in summary_df.columns and "real" in summary_df.columns:
-        max_x = max(summary_df["fake"].max(), summary_df["real"].max())
-        annotations = []  # ratio badges added below; no footer (insight bar above carries the caption)
-        for _, row in summary_df.iterrows():
-            fv = row.get("fake", 0); rv = row.get("real", 0)
-            if rv > 0.01:
-                ratio = fv / rv
-                annotations.append(dict(
-                    x=max(fv, rv) + max_x * 0.02,
-                    y=row["metric"],
-                    text=f"{ratio:.1f}×",
-                    showarrow=False,
-                    xanchor="left", yanchor="middle",
-                    font=dict(size=9, color=FC if ratio > 1 else RC)
-                ))
-    else:
-        annotations = []
+    # Real dots
+    fig.add_trace(go.Scatter(
+        x=rv, y=metrics, mode="markers", name="Real News",
+        marker=dict(color=RC, size=13, opacity=0.92,
+                    line=dict(width=2, color="white"), symbol="circle"),
+        hovertemplate="<b>%{y}</b><br>Real avg: <b>%{x:.2f}</b><extra></extra>",
+    ))
+
+    # Fake dots
+    fig.add_trace(go.Scatter(
+        x=fv, y=metrics, mode="markers", name="Fake News",
+        marker=dict(color=FC, size=13, opacity=0.92,
+                    line=dict(width=2, color="white"), symbol="circle"),
+        hovertemplate="<b>%{y}</b><br>Fake avg: <b>%{x:.2f}</b><extra></extra>",
+    ))
+
+    # Ratio badges in data space
+    annotations = []
+    for m, f, r, ratio in zip(metrics, fv, rv, ratios):
+        badge_x = max(f, r) + x_max * 0.01
+        badge_col = FC if ratio >= 2.0 else ("#fbbf24" if ratio >= 1.2 else RC)
+        annotations.append(dict(
+            x=badge_x, y=m,
+            text=f"  {ratio:.1f}×  ",
+            showarrow=False, xanchor="left", yanchor="middle",
+            font=dict(size=10, color=badge_col, family="DM Mono, monospace"),
+            borderpad=3,
+        ))
+
+    # Largest gap callout
+    max_ratio_idx = ratios.index(max(ratios))
+    annotations.append(dict(
+        x=fv[max_ratio_idx], y=metrics[max_ratio_idx],
+        text=f"Largest gap:<br>{ratios[max_ratio_idx]:.1f}× higher in fake news",
+        showarrow=True, arrowhead=2, arrowcolor=FC, arrowwidth=1.5,
+        ax=60, ay=-28,
+        font=dict(size=9, color=FC, family="DM Mono, monospace"),
+        bgcolor="rgba(6,10,16,0.88)", borderpad=4,
+        bordercolor="rgba(244,63,94,0.3)", borderwidth=1,
+    ))
 
     fig.update_layout(
         title=dict(
             text="Across every measurable dimension, how differently does fake news spread?",
             font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
-        barmode="group",
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=210, r=120, t=68, b=56),
+        margin=dict(l=218, r=120, t=72, b=56),
         height=480,
         xaxis=dict(title=dict(text="Average value across all 200 claims", standoff=6),
-                   gridcolor=GRID, tickfont=dict(color=TEXT)),
-        yaxis=dict(type="category", tickfont=dict(color=TEXT, size=11), gridcolor=GRID),
+                   gridcolor=GRID, tickfont=dict(color=TEXT),
+                   range=[0, x_max], zeroline=False),
+        yaxis=dict(type="category", tickfont=dict(color=TEXT, size=11),
+                   gridcolor=GRID, categoryorder="array", categoryarray=metrics),
         legend=dict(bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID, borderwidth=1,
-                    font=dict(size=11, color=TEXT), x=1.01, y=1, xanchor="left"),
+                    font=dict(size=11, color=TEXT), x=0.01, y=0.01,
+                    xanchor="left", yanchor="bottom"),
         annotations=annotations,
     )
     return fig
@@ -1453,42 +1520,152 @@ def plot_mutation_similarity(mutation_df):
     return fig
 
 def plot_depth_virality_scatter(metrics_df):
+    """
+    Depth x Virality scatter — reference quality.
+    Quadrant zone shading, per-class regression lines with R² in data space,
+    centroid markers, quadrant labels.
+    """
+    import numpy as _np
     if metrics_df.empty: return _empty("No data")
+
+    df = metrics_df.copy()
+    df["max_depth"]      = pd.to_numeric(df["max_depth"],      errors="coerce").fillna(0)
+    df["virality_score"] = pd.to_numeric(df["virality_score"], errors="coerce").fillna(0)
+
+    fake_df = df[df["label"] == "fake"]
+    real_df = df[df["label"] == "real"]
+
+    x_max = float(df["max_depth"].max())     * 1.08
+    y_max = float(df["virality_score"].max()) * 1.08
+    x_mid = float(df["max_depth"].median())
+    y_mid = float(df["virality_score"].median())
+
     fig = go.Figure()
-    for lbl, colour in [("fake", FC), ("real", RC)]:
-        df = metrics_df[metrics_df["label"] == lbl]
+
+    # Quadrant zone shading
+    fig.add_shape(type="rect", x0=0,     x1=x_mid, y0=0,     y1=y_mid,
+                  fillcolor="rgba(16,185,129,0.07)",  line_width=0, layer="below")
+    fig.add_shape(type="rect", x0=x_mid, x1=x_max, y0=y_mid, y1=y_max,
+                  fillcolor="rgba(244,63,94,0.09)",   line_width=0, layer="below")
+    fig.add_shape(type="rect", x0=0,     x1=x_mid, y0=y_mid, y1=y_max,
+                  fillcolor="rgba(251,191,36,0.04)",  line_width=0, layer="below")
+    fig.add_shape(type="rect", x0=x_mid, x1=x_max, y0=0,     y1=y_mid,
+                  fillcolor="rgba(251,191,36,0.04)",  line_width=0, layer="below")
+
+    # Median crosshair lines
+    fig.add_shape(type="line", x0=x_mid, x1=x_mid, y0=0, y1=y_max,
+                  line=dict(color="#334155", width=1.2, dash="dot"), layer="below")
+    fig.add_shape(type="line", x0=0, x1=x_max, y0=y_mid, y1=y_mid,
+                  line=dict(color="#334155", width=1.2, dash="dot"), layer="below")
+
+    annotations = []
+
+    # Regression lines + R² embedded in data space
+    for lbl, sub, colour in [("fake", fake_df, FC), ("real", real_df, RC)]:
+        if len(sub) < 3: continue
+        xs = sub["max_depth"].values.astype(float)
+        ys = sub["virality_score"].values.astype(float)
+        m, b   = _np.polyfit(xs, ys, 1)
+        ys_hat = m * xs + b
+        ss_res = float(_np.sum((ys - ys_hat) ** 2))
+        ss_tot = float(_np.sum((ys - ys.mean()) ** 2))
+        r2     = 1 - ss_res / ss_tot if ss_tot > 0 else 0
+        x_line = [float(xs.min()), float(xs.max())]
+        y_line = [m * x_line[0] + b, m * x_line[1] + b]
         fig.add_trace(go.Scatter(
-            x=df["max_depth"].astype(float).tolist(),
-            y=df["virality_score"].astype(float).tolist(),
-            mode="markers",
-            name="Fake News" if lbl == "fake" else "Real News",
-            marker=dict(color=colour, size=8, opacity=0.75,
-                        line=dict(width=0.5, color=BG)),
-            text=df["claim_id"].tolist(),
-            hovertemplate=(
-                "<b>%{text}</b><br>"
-                "Cascade depth: %{x}<br>"
-                "Virality score: %{y:.3f}<extra></extra>"
-            )
+            x=x_line, y=y_line, mode="lines",
+            line=dict(color=colour, width=2, dash="dash"),
+            showlegend=False, hoverinfo="skip",
         ))
+        lname = "Fake" if lbl == "fake" else "Real"
+        annotations.append(dict(
+            x=x_line[1], y=max(0.0, y_line[1]),
+            text=f"y = {m:+.3f}x + {b:.2f}<br>R² = {r2:.3f}  [{lname}]",
+            showarrow=False, xanchor="right", yanchor="bottom",
+            font=dict(size=9, color=colour, family="DM Mono, monospace"),
+            bgcolor="rgba(6,10,16,0.82)", borderpad=4,
+        ))
+
+    # Data points
+    for lbl, sub, colour, name in [("fake", fake_df, FC, "Fake News"),
+                                    ("real", real_df, RC, "Real News")]:
+        if sub.empty: continue
+        fig.add_trace(go.Scatter(
+            x=sub["max_depth"].astype(float).tolist(),
+            y=sub["virality_score"].astype(float).tolist(),
+            mode="markers", name=name,
+            marker=dict(color=colour, size=7, opacity=0.70,
+                        line=dict(width=0.8, color=BG)),
+            text=sub["claim_id"].tolist(),
+            hovertemplate="<b>%{text}</b><br>Depth: %{x}<br>Virality: %{y:.3f}<extra></extra>",
+        ))
+
+    # Centroid markers
+    for sub, colour, name in [(fake_df, FC, "Fake"), (real_df, RC, "Real")]:
+        if sub.empty: continue
+        cx = float(sub["max_depth"].mean())
+        cy = float(sub["virality_score"].mean())
+        fig.add_trace(go.Scatter(
+            x=[cx], y=[cy], mode="markers",
+            marker=dict(color=colour, size=16, symbol="diamond",
+                        line=dict(width=2.5, color="white"), opacity=1.0),
+            showlegend=False,
+            hovertemplate=f"<b>{name} centroid</b><br>Avg depth: {cx:.1f}<br>Avg virality: {cy:.3f}<extra></extra>",
+        ))
+        annotations.append(dict(
+            x=cx, y=cy, text=f"  {name}<br>  centroid",
+            showarrow=False, xanchor="left", yanchor="middle",
+            font=dict(size=8, color=colour),
+            bgcolor="rgba(6,10,16,0.75)", borderpad=2,
+        ))
+
+    # Quadrant labels
+    for qx, qy, qtxt, qcol in [
+        (x_mid*0.35, y_max*0.90, "LOW DEPTH · HIGH VIRALITY", "#fbbf24"),
+        (x_max*0.78, y_max*0.90, "HIGH DEPTH · HIGH VIRALITY",  FC),
+        (x_mid*0.35, y_max*0.10, "LOW DEPTH · LOW VIRALITY",    RC),
+        (x_max*0.78, y_max*0.10, "HIGH DEPTH · LOW VIRALITY",   "#fbbf24"),
+    ]:
+        annotations.append(dict(
+            x=qx, y=qy, text=qtxt,
+            showarrow=False, xanchor="center", yanchor="middle",
+            font=dict(size=9, color=qcol, family="DM Mono, monospace"),
+            bgcolor="rgba(6,10,16,0.60)", borderpad=3,
+        ))
+
+    # Median crosshair label
+    annotations.append(dict(
+        x=x_mid, y=y_max * 0.99,
+        text=f"median depth = {x_mid:.1f}",
+        showarrow=False, xanchor="center", yanchor="top",
+        font=dict(size=8, color="#475569"),
+        bgcolor="rgba(6,10,16,0.70)", borderpad=2,
+    ))
+
+    # Footer
+    annotations.append(dict(
+        x=0.5, y=-0.14, xref="paper", yref="paper",
+        text="Each dot = one claim  ·  ◆ = class centroid  ·  Dashed = linear regression  ·  Zones: red = fake territory · green = real territory",
+        showarrow=False, font=dict(size=10, color="#475569"), align="center",
+    ))
+
     fig.update_layout(
         title=dict(
             text="Do claims that spread deeper also achieve higher virality?",
             font=dict(size=13, color=TEXT), x=0.5, xanchor="center"),
         paper_bgcolor=BG, plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(l=56, r=40, t=64, b=80),
+        margin=dict(l=64, r=48, t=68, b=96),
+        height=440,
         xaxis=dict(title="Max cascade depth (share generations)",
-                   gridcolor=GRID, tickfont=dict(color=TEXT)),
-        yaxis=dict(title="Virality score",
-                   gridcolor=GRID, tickfont=dict(color=TEXT)),
-        legend=dict(bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID,
-                    borderwidth=1, font=dict(size=11, color=TEXT)),
-        annotations=[dict(
-            text="Each dot = one claim · Fake claims cluster top-right (deeper + more viral) · Real claims bottom-left",
-            x=0, y=-0.12, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color="#475569"),
-            align="left", xanchor="left"
-        )]
+                   gridcolor=GRID, tickfont=dict(color=TEXT),
+                   range=[0, x_max], zeroline=False),
+        yaxis=dict(title="Virality score (0–1)",
+                   gridcolor=GRID, tickfont=dict(color=TEXT),
+                   range=[0, y_max], zeroline=False),
+        legend=dict(bgcolor="rgba(13,21,32,0.9)", bordercolor=GRID, borderwidth=1,
+                    font=dict(size=11, color=TEXT), x=0.01, y=0.99,
+                    xanchor="left", yanchor="top"),
+        annotations=annotations,
     )
     return fig
